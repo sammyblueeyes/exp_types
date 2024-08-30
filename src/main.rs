@@ -1,4 +1,6 @@
+use std::convert::From;
 use std::fmt::Debug;
+
 trait A {
     type Error: Debug;
 
@@ -19,6 +21,14 @@ where
     GenError,
     AError(<T as A>::Error),
     BError(<T as B>::Error),
+}
+
+// Reproduce the failure:
+// error[E0119]: conflicting implementations of trait `From<GenError<_>>` for type `GenError<_>`
+impl<T> From<<T as A>::Error> for GenError<T> {
+    fn from(item: <T as A>::Error) -> Self {
+        Self::AError(item)
+    }
 }
 
 struct GenVal<'a, T>
