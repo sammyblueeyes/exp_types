@@ -1,4 +1,3 @@
-use std::convert::From;
 use std::fmt::Debug;
 
 trait A {
@@ -13,22 +12,14 @@ trait B {
     fn do_b(&self) -> Result<(), Self::Error>;
 }
 
-#[derive(Debug)]
+#[derive(thiserror::Error)]
 enum GenError<T>
 where
     T: A + B,
 {
     GenError,
-    AError(<T as A>::Error),
-    BError(<T as B>::Error),
-}
-
-// Reproduce the failure:
-// error[E0119]: conflicting implementations of trait `From<GenError<_>>` for type `GenError<_>`
-impl<T> From<<T as A>::Error> for GenError<T> {
-    fn from(item: <T as A>::Error) -> Self {
-        Self::AError(item)
-    }
+    AError(#[from] <T as A>::Error),
+    BError(#[from] <T as B>::Error),
 }
 
 struct GenVal<'a, T>
@@ -44,17 +35,11 @@ where
     T: A + B,
 {
     fn call_a(&self) -> Result<(), GenError<T>> {
-        match self.gen_val.do_a() {
-            Ok(_) => Ok(()),
-            Err(e) => Err(GenError::AError(e)),
-        }
+        Ok(self.gen_val.do_a()?)
     }
 
     fn call_b(&self) -> Result<(), GenError<T>> {
-        match self.gen_val.do_b() {
-            Ok(_) => Ok(()),
-            Err(e) => Err(GenError::BError(e)),
-        }
+        Ok(self.gen_val.do_b()?)
     }
     fn call(&self) -> Result<(), GenError<T>> {
         Err(GenError::GenError)
@@ -86,11 +71,41 @@ impl B for Tee {
     }
 }
 
+#[derive(Debug)]
+struct Ter {}
+
+#[derive(Debug)]
+enum TerErrors {
+    AFailedForT,
+    BFailedForT,
+}
+
+impl A for Ter {
+    type Error = TerErrors;
+
+    fn do_a(&self) -> Result<(), Self::Error> {
+        Err(TerErrors::AFailedForT)
+    }
+}
+
+impl B for Ter {
+    type Error = TerErrors;
+
+    fn do_b(&self) -> Result<(), Self::Error> {
+        Err(TerErrors::BFailedForT)
+    }
+}
+
 fn main() {
     println!("Hello, world!");
 
     let mut t = Tee {};
+    let v = GenVal { gen_val: &mut t };
+    println!("{:?}", v.call_a());
+    println!("{:?}", v.call_b());
+    println!("{:?}", v.call());
 
+    let mut t = Ter {};
     let v = GenVal { gen_val: &mut t };
     println!("{:?}", v.call_a());
     println!("{:?}", v.call_b());
